@@ -1,0 +1,41 @@
+<?xml version="1.0" ?>
+<Project frameworkVersion="v3_5" name="Wx.Server.Handlers" path="addon-modules/Wx/Server/Handlers" type="Library">
+     <Configuration name="Debug">
+       <Options>
+         <OutputPath>../../../../bin/</OutputPath>
+       </Options>
+     </Configuration>
+     <Configuration name="Release">
+       <Options>
+         <OutputPath>../../../../bin/</OutputPath>
+       </Options>
+     </Configuration>
+
+     <ReferencePath>../../../../bin/</ReferencePath>
+     <Reference name="System"/>
+     <Reference name="System.Xml"/>
+     <Reference name="System.Web"/>
+
+     <Reference name="OpenMetaverse" path="../../../../bin/"/>
+     <Reference name="OpenMetaverseTypes" path="../../../../bin/"/>
+     <Reference name="OpenMetaverse.StructuredData" path="../../../../bin/"/>
+     <Reference name="OpenSim.Data"/>
+     <Reference name="OpenSim.Data.MySQL"/>
+     <Reference name="Wx.Data"/>
+     <Reference name="Wx.Services.Interfaces"/>
+     <Reference name="MySql.Data" path="../../../../bin/"/>
+     <Reference name="OpenSim.Framework"/>
+     <Reference name="OpenSim.Framework.Console"/>
+     <Reference name="OpenSim.Framework.Servers.HttpServer"/>
+     <Reference name="OpenSim.Services.Interfaces"/>
+     <Reference name="OpenSim.Server.Base"/>
+     <Reference name="OpenSim.Server.Handlers"/>
+     <Reference name="OpenSim.Services.Base"/>
+     <Reference name="Nini" path="../../../../bin/"/>
+     <Reference name="log4net" path="../../../../bin/"/>
+
+     <Files>
+       <Match pattern="*.cs" recurse="true"/>
+     </Files>
+   </Project>
+

@@ -1,0 +1,12 @@
+:VERSION 1         # --------------------------
+
+BEGIN;
+
+CREATE TABLE `WxUser` (
+    `FirstName` CHAR(40) NOT NULL,
+    `LastName` CHAR(40) NOT NULL,
+    `Food` CHAR(40) NOT NULL,
+    UNIQUE KEY  (`FirstName`, `LastName`)
+) ENGINE=InnoDB;
+
+COMMIT;
