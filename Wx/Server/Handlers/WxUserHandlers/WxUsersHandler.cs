@@ -37,6 +37,7 @@ using Wx.Services.Interfaces;
 using Wx.Server;
 using Wx.Data;
 
+using OpenSim.Data;
 
 namespace Wx.Server.Handlers
 {
@@ -44,8 +45,8 @@ namespace Wx.Server.Handlers
     public class WxUsersHandler : BaseStreamHandler
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        protected IUserAccountService m_userAccounts = null;
-        protected IWxUserService m_WxService = null;
+        protected IUserAccountService m_UserAccountService = null;
+        //protected IWxUserService m_WxService = null;
 
         //
         // Here we go...
@@ -54,9 +55,10 @@ namespace Wx.Server.Handlers
         // as it creates our instance...
         // Our instance gets passed to the server, then we're live and ready for action
         //
-        public WxUsersHandler(IWxUserService service) : base("POST", "/WxUser")
+        public WxUsersHandler(IUserAccountService service)
+            : base("POST", "/WxUser")
         {
-            m_WxService = service;
+            m_UserAccountService = service;
             m_log.Info("[WxUsersHandler]: Loading");
         }
 
@@ -83,14 +85,17 @@ namespace Wx.Server.Handlers
                     case "testing":
                         return TestResponse(request);
 
-                    case "get_user_info":
-                        return GetUserInfo(request);
+                    case "create_user":
+                        return CreateUser(request);
 
-                    case "put_wxuser":
-                        return PutWxUser(request);
+                    case "get_user_by_name":
+                        return GetUserByName(request);
 
-                    case "list_wxuser":
-                        return ListWxUser();
+                    case "get_user_by_id":
+                        return GetUserById(request);
+
+                    case "get_user_by_email":
+                        return GetUserByEmail(request);
 
                     default:
                         m_log.DebugFormat("[WxUserHandler]: unknown method {0} request {1}", method.Length, method);
@@ -113,11 +118,18 @@ namespace Wx.Server.Handlers
 
         private byte[] FailureResult(string msg)
         {
+            m_log.ErrorFormat("[WxUserHandler] " + msg);
             OSDMap doc = new OSDMap(2);
             doc["Result"] = OSD.FromString("Failure");
             doc["Message"] = OSD.FromString(msg);
 
             return DocToBytes(doc);
+        }
+
+        private byte[] SuccessResult(OSDMap response)
+        {
+            response["Result"] = OSD.FromString("Success");
+            return DocToBytes(response);
         }
 
         private byte[] DocToBytes(OSDMap doc)
@@ -127,39 +139,195 @@ namespace Wx.Server.Handlers
         #endregion utility
 
         #region Handler Methods
-        private byte[] GetUserInfo (Dictionary<string, object> request)
-        {
-            UUID id = UUID.Zero;
-            UserAccount d = null;
 
-            if ( request.ContainsKey("user_id"))
+        /// <summary>
+        /// Creates a new user
+        /// Required parameters : first_name, last_name, email
+        /// Optional parameters : scope_id, user_flags, user_level, user_title
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private byte[] CreateUser(Dictionary<string, object> request)
+        {
+            try
             {
-                if (UUID.TryParse(request["user_id"].ToString(), out id))
+                // Checking required parameters for creating a user account
+                if (request.ContainsKey("first_name") &&
+                    request.ContainsKey("last_name") &&
+                    request.ContainsKey("email"))
                 {
-                    d = m_WxService.GetUserData(id);
+                    string firstName = request["first_name"].ToString();
+                    string lastName = request["last_name"].ToString();
+                    string email = request["email"].ToString();
+
+                    UUID scopeId = UUID.Zero;
+                    if (request.ContainsKey("scope_id")) scopeId = UUID.Parse(request["scope_id"].ToString());
+
+                    if (m_UserAccountService.GetUserAccount(scopeId, firstName, lastName) == null)
+                    {
+                        UserAccount userAccount = new UserAccount(UUID.Zero, firstName, lastName, email);
+
+                        if (request.ContainsKey("scope_id")) userAccount.ScopeID = scopeId;
+                        if (request.ContainsKey("user_flags")) userAccount.UserFlags = int.Parse(request["user_flags"].ToString());
+                        if (request.ContainsKey("user_level")) userAccount.UserLevel = int.Parse(request["user_level"].ToString());
+                        if (request.ContainsKey("user_title")) userAccount.UserTitle = request["user_title"].ToString();
+
+                        userAccount.ServiceURLs["HomeURI"] = string.Empty;
+                        userAccount.ServiceURLs["GatekeeperURI"] = string.Empty;
+                        userAccount.ServiceURLs["InventoryServerURI"] = string.Empty;
+                        userAccount.ServiceURLs["AssetServerURI"] = string.Empty;
+
+                        m_UserAccountService.StoreUserAccount(userAccount);
+                        m_log.InfoFormat("[WxUserHandler] Created user {0} {1} with UUID {2}", userAccount.FirstName, userAccount.LastName, userAccount.PrincipalID);
+
+                        OSDMap response = new OSDMap();
+                        return SuccessResult(response);
+                    }
+                    else
+                        return FailureResult("A user with the same first and last names already exists");
                 }
                 else
-                {
-                    return FailureResult(String.Format("Error getting userID {0}", id));
-                }
+                    return FailureResult("Some or all required parameters missing");
             }
-
-            if ( d != null )
+            catch (Exception e)
             {
-                Dictionary<string, object> userData = d.ToKeyValuePairs();
-                OSDMap doc = new OSDMap(userData.Count);
-
-                foreach (KeyValuePair<string, object> item in userData) {
-
-                    doc[item.Key] = OSD.FromString(item.Value.ToString());
-
-                }
-                return DocToBytes(doc);
+                m_log.ErrorFormat("[WxUserHandler] " + e.ToString());
+                return FailureResult("Exception while creating user");
             }
-            return FailureResult("Error getting user info");
         }
 
-        private byte[] TestResponse (Dictionary<string, object> request)
+        /// <summary>
+        /// Gets user info by name
+        /// Required parameters : first_name, last_name
+        /// Optional parameters : scope_id
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private byte[] GetUserByName(Dictionary<string, object> request)
+        {
+            try
+            {
+                // Checking required parameters for creating a user account
+                if (request.ContainsKey("first_name") &&
+                    request.ContainsKey("last_name"))
+                {
+                    string firstName = request["first_name"].ToString();
+                    string lastName = request["last_name"].ToString();
+
+                    UUID scopeId = UUID.Zero;
+                    if (request.ContainsKey("scope_id")) scopeId = UUID.Parse(request["scope_id"].ToString());
+
+                    UserAccount userAccount = m_UserAccountService.GetUserAccount(scopeId, firstName, lastName);
+                    if (userAccount != null)
+                    {
+                        m_log.InfoFormat("[WxUserHandler] Getting user info for {0} {1}", userAccount.FirstName, userAccount.LastName);
+
+                        OSDMap response = new OSDMap();
+                        foreach (KeyValuePair<string, object> data in userAccount.ToKeyValuePairs())
+                            response.Add(data.Key.ToString(), data.Value.ToString());
+
+                        return SuccessResult(response);
+                    }
+                    else
+                        return FailureResult("Not found");
+                }
+                else
+                    return FailureResult("Some or all required parameters missing");
+            }
+            catch (Exception e)
+            {
+                m_log.ErrorFormat("[WxUserHandler] " + e.ToString());
+                return FailureResult("Exception while getting user info");
+            }
+        }
+
+        /// <summary>
+        /// Gets uesr info by PrincipalId
+        /// Required parameters : principal_id
+        /// Optional parameters : scope_id
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private byte[] GetUserById(Dictionary<string, object> request)
+        {
+            try
+            {
+                // Checking required parameters for creating a user account
+                if (request.ContainsKey("principal_id"))
+                {
+                    UUID principalId = UUID.Parse(request["principal_id"].ToString());
+
+                    UUID scopeId = UUID.Zero;
+                    if (request.ContainsKey("scope_id")) scopeId = UUID.Parse(request["scope_id"].ToString());
+
+                    UserAccount userAccount = m_UserAccountService.GetUserAccount(scopeId, principalId);
+                    if (userAccount != null)
+                    {
+                        m_log.InfoFormat("[WxUserHandler] Getting user info for {0} {1}", userAccount.FirstName, userAccount.LastName);
+
+                        OSDMap response = new OSDMap();
+                        foreach (KeyValuePair<string, object> data in userAccount.ToKeyValuePairs())
+                            response.Add(data.Key.ToString(), data.Value.ToString());
+
+                        return SuccessResult(response);
+                    }
+                    else
+                        return FailureResult("Not found");
+                }
+                else
+                    return FailureResult("Some or all required parameters missing");
+            }
+            catch (Exception e)
+            {
+                m_log.ErrorFormat("[WxUserHandler] " + e.ToString());
+                return FailureResult("Exception while getting user info");
+            }
+        }
+
+        /// <summary>
+        /// Gets uesr info by email
+        /// Required parameters : email
+        /// Optional parameters : 
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        private byte[] GetUserByEmail(Dictionary<string, object> request)
+        {
+            try
+            {
+                // Checking required parameters for creating a user account
+                if (request.ContainsKey("email"))
+                {
+                    string email = request["email"].ToString();
+
+                    UUID scopeId = UUID.Zero;
+                    if (request.ContainsKey("scope_id")) scopeId = UUID.Parse(request["scope_id"].ToString());
+
+                    UserAccount userAccount = m_UserAccountService.GetUserAccount(scopeId, email);
+                    if (userAccount != null)
+                    {
+                        m_log.InfoFormat("[WxUserHandler] Getting user info for {0} {1}", userAccount.FirstName, userAccount.LastName);
+
+                        OSDMap response = new OSDMap();
+                        foreach (KeyValuePair<string, object> data in userAccount.ToKeyValuePairs())
+                            response.Add(data.Key.ToString(), data.Value.ToString());
+
+                        return SuccessResult(response);
+                    }
+                    else
+                        return FailureResult("Not found");
+                }
+                else
+                    return FailureResult("Some or all required parameters missing");
+            }
+            catch (Exception e)
+            {
+                m_log.ErrorFormat("[WxUserHandler] " + e.ToString());
+                return FailureResult("Exception while getting user info");
+            }
+        }
+
+        private byte[] TestResponse(Dictionary<string, object> request)
         {
             OSDMap doc = new OSDMap(request.Count + 1);
             if ( request.ContainsKey("HELLO"))
@@ -181,54 +349,54 @@ namespace Wx.Server.Handlers
         #endregion Handler Methods
 
         #region Wx Database
-        private byte[] PutWxUser(Dictionary<string, object> request)
-        {
-            IWxUserData data = m_WxService.WxDb;
+        //private byte[] PutWxUser(Dictionary<string, object> request)
+        //{
+        //    IWxUserData data = m_WxService.WxDb;
 
-            UserData user = new UserData();
+        //    UserData user = new UserData();
 
-            user.FirstName = request["first_name"].ToString();
-            user.LastName = request["last_name"].ToString();
-            user.Food = request["fav_food"].ToString();
+        //    user.FirstName = request["first_name"].ToString();
+        //    user.LastName = request["last_name"].ToString();
+        //    user.Food = request["fav_food"].ToString();
 
-            data.StoreName(user);
-            OSDMap doc = new OSDMap();
+        //    data.StoreName(user);
+        //    OSDMap doc = new OSDMap();
 
-            doc["result"] = "success";
-            return DocToBytes(doc);
-        }
+        //    doc["result"] = "success";
+        //    return DocToBytes(doc);
+        //}
 
-        private byte[] ListWxUser()
-        {
-            IWxUserData data = m_WxService.WxDb;
+        //private byte[] ListWxUser()
+        //{
+        //    IWxUserData data = m_WxService.WxDb;
 
-            List<UserData> list = data.ListNames();
-            OSDMap doc = new OSDMap();
+        //    List<UserData> list = data.ListNames();
+        //    OSDMap doc = new OSDMap();
 
-            foreach ( UserData u in list )
-            {
-                OSDMap udata = new OSDMap();
-                string uname = String.Format("{0} {1}", u.FirstName, u.LastName);
-                string ufood = u.Food.ToString();
+        //    foreach ( UserData u in list )
+        //    {
+        //        OSDMap udata = new OSDMap();
+        //        string uname = String.Format("{0} {1}", u.FirstName, u.LastName);
+        //        string ufood = u.Food.ToString();
 
-                udata["name"] = OSD.FromString(uname);
-                udata["food"] = OSD.FromString(ufood);
-                doc.Add(uname, udata);
-            }
+        //        udata["name"] = OSD.FromString(uname);
+        //        udata["food"] = OSD.FromString(ufood);
+        //        doc.Add(uname, udata);
+        //    }
 
-            return DocToBytes(doc);
-        }
+        //    return DocToBytes(doc);
+        //}
         #endregion Wx Database
 
         #region User Functions
-        public UserAccount GetUserData(UUID userID) {
+        //public UserAccount GetUserData(UUID userID) {
 
-            UserAccount userInfo = null;
+        //    UserAccount userInfo = null;
 
-            userInfo = m_WxService.GetUserData(userID);
+        //    userInfo = m_WxService.GetUserData(userID);
 
-            return userInfo;
-        }
+        //    return userInfo;
+        //}
         #endregion User Functions
     }
 }
