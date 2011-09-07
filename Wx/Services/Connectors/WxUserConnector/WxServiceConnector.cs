@@ -28,7 +28,7 @@ namespace Wx.Connector
     public class WxUserServiceConnector : ServiceConnector
     {
 
-        private IUserAccountService m_UserAccountService;
+        private IWxUserService m_WxUserService;
         private string m_ConfigName = "WxUserService";
         // Our connector
         // We load this first. See the ini [Startup] ServiceConnectors
@@ -59,9 +59,9 @@ namespace Wx.Connector
                 throw new Exception("No LocalServiceModule in config file");
 
             Object[] args = new Object[] { config };
-            m_UserAccountService = ServerUtils.LoadPlugin<IUserAccountService>(WxUserService, args);
+            m_WxUserService = ServerUtils.LoadPlugin<IWxUserService>(WxUserService, args);
 
-            server.AddStreamHandler(new WxUsersHandler(m_UserAccountService));
+            server.AddStreamHandler(new WxUsersHandler(m_WxUserService));
         }
     }
 }

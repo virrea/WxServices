@@ -19,6 +19,7 @@ using OpenSim.Server.Base;
 using OpenSim.Services.Interfaces;
 using OpenMetaverse;
 using Wx.Data;
+using System.Collections.Generic;
 
 
 namespace Wx.Services.Interfaces
@@ -31,6 +32,13 @@ namespace Wx.Services.Interfaces
         }
 
         UserAccount GetUserData(UUID userID);
+
+        bool CreateUser(string firstName, string lastName, string email, UUID scopeId, int userFlags, int userLevel, string userTitle, Dictionary<string, object> servicesUrls);
+        bool UpdateUser(UUID principalId, string firstName, string lastName, string email, UUID scopeId, int userFlags, int userLevel, string userTitle, Dictionary<string, object> servicesUrls);
+        UserAccount GetUserByName(string firstName, string lastName, UUID scopeId);
+        UserAccount GetUserByEmail(string email, UUID scopeId);
+        UserAccount GetUserById(UUID principalId, UUID scopeId);
+        List<UserAccount> GetUsersByQuery(string query, UUID scopeId);
     }
 }
 

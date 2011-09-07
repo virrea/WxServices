@@ -35,7 +35,7 @@ namespace Wx.Services.WxUserService
     {
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         protected IConfigSource m_config;
-        protected IUserAccountService m_userAccounts = null;
+        protected IUserAccountService m_UserAccountService = null;
 
         #region properties
         // Let other classes use our custom database
@@ -71,7 +71,7 @@ namespace Wx.Services.WxUserService
                 if (userService != String.Empty)
                 {
                     Object[] args = new Object[] { config };
-                    m_userAccounts = ServerUtils.LoadPlugin<IUserAccountService>(userService, args);
+                    m_UserAccountService = ServerUtils.LoadPlugin<IUserAccountService>(userService, args);
                 }
             }
 
@@ -87,7 +87,8 @@ namespace Wx.Services.WxUserService
             }
         }
 
-        #region service handlers
+        #region Service handlers
+
         // Uses the OpenSim core user services
         // We have [UserAccountService] in our ini to handle the configuration
         // when we load it.
@@ -95,10 +96,77 @@ namespace Wx.Services.WxUserService
 
             UserAccount userInfo = null;
 
-            userInfo = m_userAccounts.GetUserAccount(UUID.Zero, userID);
+            userInfo = m_UserAccountService.GetUserAccount(UUID.Zero, userID);
 
             return userInfo;
         }
+
+        public bool CreateUser(string firstName, string lastName, string email, UUID scopeId, int userFlags, int userLevel, string userTitle, Dictionary<string, object> servicesUrls)
+        {
+            if (m_UserAccountService.GetUserAccount(scopeId, firstName, lastName) == null)
+            {
+                UserAccount userAccount = new UserAccount(scopeId, firstName, lastName, email);
+                if (userFlags != null) userAccount.UserFlags = userFlags;
+                if (userLevel != null) userAccount.UserLevel = userLevel;
+                if (userTitle != null) userAccount.UserTitle = userTitle;
+                if (servicesUrls != null)
+                    userAccount.ServiceURLs = servicesUrls;
+                else
+                {
+                    userAccount.ServiceURLs["HomeURI"] = string.Empty;
+                    userAccount.ServiceURLs["GatekeeperURI"] = string.Empty;
+                    userAccount.ServiceURLs["InventoryServerURI"] = string.Empty;
+                    userAccount.ServiceURLs["AssetServerURI"] = string.Empty;
+                }
+
+                m_UserAccountService.StoreUserAccount(userAccount);
+                return true;
+            }
+            else
+                return false;
+        }
+
+        public bool UpdateUser(UUID principalId, string firstName, string lastName, string email, UUID scopeId, int userFlags, int userLevel, string userTitle, Dictionary<string, object> servicesUrls)
+        {
+            UserAccount userAccount = m_UserAccountService.GetUserAccount(scopeId, principalId);
+            if (userAccount != null)
+            {
+                userAccount.FirstName = firstName;
+                userAccount.LastName = lastName;
+                userAccount.Email = email;
+                userAccount.ScopeID = scopeId;
+                userAccount.UserFlags = userFlags;
+                userAccount.UserLevel = userLevel;
+                userAccount.UserTitle = userTitle;
+                userAccount.ServiceURLs = servicesUrls;
+
+                m_UserAccountService.StoreUserAccount(userAccount);
+                return true;
+            }
+            else
+                return false;
+        }
+
+        public UserAccount GetUserByName(string firstName, string lastName, UUID scopeId)
+        {
+            return m_UserAccountService.GetUserAccount(scopeId, firstName, lastName);
+        }
+
+        public UserAccount GetUserByEmail(string email, UUID scopeId)
+        {
+            return m_UserAccountService.GetUserAccount(scopeId, email);
+        }
+
+        public UserAccount GetUserById(UUID principalId, UUID scopeId)
+        {
+            return m_UserAccountService.GetUserAccount(scopeId, principalId);
+        }
+
+        public List<UserAccount> GetUsersByQuery(string query, UUID scopeId)
+        {
+            return m_UserAccountService.GetUserAccounts(scopeId, query);
+        }
+
         #endregion
 
         #region console handlers
